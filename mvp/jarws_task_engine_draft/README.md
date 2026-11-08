@@ -26,4 +26,4 @@ See `TESTING.md` for commands, environment details, and limitations.
 - Authentication, signing, production identity, and secure persistence are not implemented.
 - Approval status names and some schema details remain draft choices.
 
-This package should not be presented as a canonical JARWS implementation until the remaining decisions, review, and repository publication are completed.
+This package should not be presented as a canonical JARWS implementation until the remaining decisions and final human review are completed.
