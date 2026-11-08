@@ -29,11 +29,12 @@
 - Missing required provenance blocks the Task pending human completion.
 - Interruption records a reason and moves the Task to `BLOCKED`. Founder, Director, or a Director delegate may unblock it. Unblocking returns it to `WAITING`; history is kept and Validator/Approval run again.
 - Every Task records source references, initiator/responsible party, and a creation trace.
-- Output validity is checked against a schema for the Task type. An experimental `DOCUMENT_REVIEW` v0.1 schema now exists in the local working draft, but it is not approved or production-ready. `CORE_CHANGE` and other work-kind schemas remain to be defined and approved.
+- Output validity is checked against a schema for the Task type. Experimental `DOCUMENT_REVIEW` and `CORE_CHANGE` v0.1 schemas now exist in the working draft, but they are not approved or production-ready and do not prove factual correctness.
 
 ## Known draft details
 
 - The exact Approval status names and transitions remain provisional.
 - The test schemas in this package are examples only.
+- The `CORE_CHANGE` rollback plan remains optional in the prototype; whether it should be required is open for review.
 - The meaning and eventual disposition of the temporary Founder role remain open.
 - Authentication, signing, production identity, and secure persistence are not included.

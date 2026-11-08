@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from uuid import uuid4
 
-from .schemas import DOCUMENT_REVIEW, validate_document_review_input
+from .schemas import (
+    DOCUMENT_REVIEW,
+    validate_core_change_input,
+    validate_document_review_input,
+)
 
 
 GLOBAL_MAX_ROUNDS = 5
@@ -220,8 +224,12 @@ class Validator:
         if not isinstance(task.input, dict):
             return False, "Task input must be an object."
         work_kind = task.input.get("work_kind")
-        if work_kind is not None:
-            if task.task_type is not TaskType.NORMAL_TASK or work_kind != DOCUMENT_REVIEW:
+        if task.task_type is TaskType.CORE_CHANGE:
+            input_valid, input_message = validate_core_change_input(task.input)
+            if not input_valid:
+                return False, input_message
+        elif work_kind is not None:
+            if work_kind != DOCUMENT_REVIEW:
                 return False, f"No input schema is configured for {task.task_type.value}/{work_kind}."
             input_valid, input_message = validate_document_review_input(task.input)
             if not input_valid:
