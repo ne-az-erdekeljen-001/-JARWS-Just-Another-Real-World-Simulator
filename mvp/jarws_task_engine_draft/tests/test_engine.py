@@ -30,6 +30,7 @@ from jarws_task_engine.engine import (  # noqa: E402
     unblock_task,
 )
 from jarws_task_engine.schemas import (  # noqa: E402
+    validate_core_change_result,
     DOCUMENT_REVIEW,
     validate_document_review_result,
 )
@@ -50,10 +51,7 @@ def result_schemas() -> dict:
             isinstance(value, dict) and value.get("status") == "ok",
             "Expected an object with status='ok'.",
         ),
-        TaskType.CORE_CHANGE: lambda _task, value: (
-            isinstance(value, dict) and bool(value.get("change_summary")),
-            "Expected a non-empty change_summary.",
-        ),
+        TaskType.CORE_CHANGE: validate_core_change_result,
         (TaskType.NORMAL_TASK, DOCUMENT_REVIEW): validate_document_review_result,
     }
 
@@ -109,6 +107,50 @@ class TaskEngineTests(unittest.TestCase):
             ],
         }
 
+    def make_core_change_task(self, **kwargs) -> Task:
+        input_data = {
+            "change_scope": "non-production Task Engine draft",
+            "impact_categories": ["GOVERNANCE"],
+            "proposed_changes": [
+                {
+                    "change_id": "CH-1",
+                    "target": "point4_submission_draft/jarws_task_engine/engine.py",
+                    "action": "Add a schema validator",
+                    "rationale": "Check the reviewed output against the agreed scope.",
+                }
+            ],
+            "acceptance_criteria": [
+                {"criterion_id": "AC-1", "description": "The result matches the proposed scope."}
+            ],
+        }
+        input_data.update(kwargs.pop("input", {}))
+        return self.make_task(task_type=TaskType.CORE_CHANGE, input=input_data, **kwargs)
+
+    @staticmethod
+    def valid_core_change_result() -> dict:
+        return {
+            "schema_version": "0.1",
+            "task_type": TaskType.CORE_CHANGE.value,
+            "outcome": "COMPLETED",
+            "summary": "Applied the proposed schema validator in the isolated draft.",
+            "change_items": [
+                {
+                    "change_id": "CH-1",
+                    "target": "point4_submission_draft/jarws_task_engine/engine.py",
+                    "action": "Add a schema validator",
+                    "result": "APPLIED",
+                    "evidence_refs": ["EV-1"],
+                }
+            ],
+            "verification": [
+                {"criterion_id": "AC-1", "result": "PASS", "evidence_refs": ["EV-1"]}
+            ],
+        }
+
+    def complete_core_change(self, access: ExecutionAccess) -> dict:
+        access.add_evidence("EV-1")
+        return self.valid_core_change_result()
+
     def test_document_review_schema_accepts_complete_report(self):
         task = self.make_document_review_task()
         result = orchestrator().run(task, lambda _access: self.valid_document_review_result())
@@ -161,6 +203,48 @@ class TaskEngineTests(unittest.TestCase):
         self.assertEqual(result.state, TaskState.ERROR)
         self.assertIn("at least one source reference", result.validation["result_check"]["message"])
 
+    def test_core_change_input_requires_scope_categories_changes_and_criteria(self):
+        task = self.make_core_change_task(input={"change_scope": ""})
+        called = False
+
+        def operation(_access):
+            nonlocal called
+            called = True
+            return self.valid_core_change_result()
+
+        result = orchestrator().run(task, operation)
+        self.assertEqual(result.state, TaskState.BLOCKED)
+        self.assertIn("change_scope", result.blocker)
+        self.assertFalse(called)
+
+    def test_core_change_result_must_match_proposed_scope(self):
+        task = self.make_core_change_task(requested_rounds=1, approval_record_id="T-1")
+        approval = ApprovalRecord(
+            task_id=task.id,
+            route=ApprovalRoute.PRE_APPROVAL,
+            status=ApprovalStatus.APPROVED_PRE,
+            scope="non-production Task Engine draft",
+            rationale="Approved for isolated prototype work.",
+        )
+        result_value = self.valid_core_change_result()
+        result_value["change_items"][0]["action"] = "Modify production authentication"
+        result = orchestrator().run(task, lambda access: (access.add_evidence("EV-1"), result_value)[1], approval)
+        self.assertEqual(result.state, TaskState.ERROR)
+        self.assertIn("exceeds or differs from the proposed scope", result.validation["result_check"]["message"])
+
+    def test_core_change_result_requires_execution_evidence(self):
+        task = self.make_core_change_task(requested_rounds=1, approval_record_id="T-1")
+        approval = ApprovalRecord(
+            task_id=task.id,
+            route=ApprovalRoute.PRE_APPROVAL,
+            status=ApprovalStatus.APPROVED_PRE,
+            scope="non-production Task Engine draft",
+            rationale="Approved for isolated prototype work.",
+        )
+        result = orchestrator().run(task, lambda _access: self.valid_core_change_result(), approval)
+        self.assertEqual(result.state, TaskState.ERROR)
+        self.assertIn("missing execution evidence", result.validation["result_check"]["message"])
+
     def test_normal_task_finishes_only_after_checker_pass(self):
         task = self.make_task()
         result = orchestrator().run(task, lambda access: {"status": "ok"})
@@ -212,14 +296,13 @@ class TaskEngineTests(unittest.TestCase):
         self.assertEqual(engine.run(task, lambda _access: {"status": "ok"}).state, TaskState.DONE)
 
     def test_critical_change_requires_separate_approval_record(self):
-        task = self.make_task(task_type=TaskType.CORE_CHANGE)
+        task = self.make_core_change_task()
         result = orchestrator().run(task, lambda _access: {"change_summary": "update"})
         self.assertEqual(result.state, TaskState.BLOCKED)
         self.assertIn("Approval record", result.blocker)
 
     def test_pre_approval_is_required_before_executor_runs(self):
-        task = self.make_task(
-            task_type=TaskType.CORE_CHANGE,
+        task = self.make_core_change_task(
             approval_record_id="T-1",
             critical_categories=["GOVERNANCE"],
         )
@@ -235,7 +318,7 @@ class TaskEngineTests(unittest.TestCase):
         def operation(_access):
             nonlocal called
             called = True
-            return {"change_summary": "update"}
+            return self.complete_core_change(_access)
 
         engine = orchestrator()
         self.assertEqual(engine.run(task, operation, approval).state, TaskState.BLOCKED)
@@ -246,8 +329,7 @@ class TaskEngineTests(unittest.TestCase):
         self.assertTrue(approval.active)
 
     def test_posthoc_change_stays_inactive_until_final_approval(self):
-        task = self.make_task(
-            task_type=TaskType.CORE_CHANGE,
+        task = self.make_core_change_task(
             approval_record_id="T-1",
             critical_categories=["SECURITY"],
         )
@@ -258,7 +340,7 @@ class TaskEngineTests(unittest.TestCase):
             scope="security change",
             rationale="Viable isolated draft; final review requested after work",
         )
-        result = orchestrator().run(task, lambda access: {"change_summary": access.goal}, approval)
+        result = orchestrator().run(task, lambda access: self.complete_core_change(access), approval)
         self.assertEqual(result.state, TaskState.DONE)
         self.assertEqual(approval.status, ApprovalStatus.PENDING_FINAL_APPROVAL)
         self.assertFalse(approval.active)
@@ -376,13 +458,12 @@ class TaskEngineTests(unittest.TestCase):
         self.assertTrue(any("Unblocked by" in item for item in task.blocker_history))
 
     def test_task_and_approval_json_round_trip(self):
-        task = self.make_task(
+        task = self.make_core_change_task(
             id="T-persist",
-            task_type=TaskType.CORE_CHANGE,
             state=TaskState.DONE,
             approval_record_id="T-persist",
             critical_categories=["GOVERNANCE"],
-            result={"change_summary": "persisted"},
+            result=self.valid_core_change_result(),
             evidence=["checker pass"],
             attempts=3,
         )
