@@ -7,7 +7,7 @@
 
 ## Run
 
-From the `point4_submission_draft` directory:
+From the root of this directory:
 
 ```sh
 python3 -B -I -m unittest discover -s tests -v
