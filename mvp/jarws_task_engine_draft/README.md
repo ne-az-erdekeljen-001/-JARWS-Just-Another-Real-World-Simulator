@@ -2,7 +2,7 @@
 
 **Status: experimental working draft; not canonical and not production security.**
 
-This package is a noncanonical working draft proposed for review in the main JARWS repository. It demonstrates the Task and approval working rules gathered during the JARWS audit. Publication on a review branch does not make it canonical; merging it to `main` requires final human review.
+This package is a noncanonical working draft in the main JARWS repository. It demonstrates the Task and approval working rules gathered during the JARWS audit. Publication in the repository does not make it canonical; the remaining project decisions are still open.
 
 ## Contents
 
