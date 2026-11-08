@@ -59,34 +59,33 @@ A `findings` lista lehet üres, ha a vizsgálat nem talált eltérést. Ha van m
 
 **Korlát:** ezek az ellenőrzések az alakot, a hivatkozások létezését és a lefedettséget vizsgálják. Nem bizonyítják, hogy a megállapítások tartalmilag igazak vagy a források értelmezése helyes.
 
-## `CORE_CHANGE` — későbbi séma
-
 ## `CORE_CHANGE`
 
-Javasolt szabály: örökölje a közös bemeneti és eredménymezőket, és a bemenet tartalmazzon `change_scope` mezőt, valamint egy vagy több `impact_category` értéket. A kategóriákat a felhasználó kritikus változásokról szóló munkakerete adja: Governance, jogosultság, biztonság, védett zóna vagy éles rendszerhatás.
+Kísérleti v0.1 bemenetként a Validator megköveteli a nem üres `change_scope`-ot, az `impact_categories` listát, legalább egy `proposed_changes` elemet és legalább egy elfogadási feltételt. A kategóriák jelenlegi kódolása: `GOVERNANCE`, `PERMISSIONS`, `SECURITY`, `PROTECTED_ZONE`, `LIVE_SYSTEM_IMPACT`. Minden tervezett változtatás egyedi `change_id`, `target`, `action` és `rationale` mezőt kap. A `rollback_plan` jelenleg opcionális; kötelezővé tétele nyitott döntés.
 
-Az eredményboríték további kötelező mezőinek javaslata:
+Az eredmény kötelező mezői:
 
-- `change_summary`: a javasolt változtatás rövid leírása;
-- `change_items`: legalább egy elem, amely az érintett elemet, a tervezett műveletet és annak indokát azonosítja;
-- `verification`: az elvégzett ellenőrzések és hivatkozott bizonyítékaik.
+- `schema_version`, `task_type`, `outcome` és nem üres `summary`;
+- `change_items`: pontosan fedje le a bemenetben tervezett változtatásokat; a `change_id`, `target` és `action` egyezzen a tervvel, az eredmény legyen `APPLIED`;
+- minden change item `evidence_refs` mezője a Task bizonyítéklistájának már rögzített elemére hivatkozzon;
+- `verification`: minden elfogadási feltételhez pontosan egy `PASS` elem és érvényes bizonyítékhivatkozás tartozzon.
 
-A `CORE_CHANGE` külön Approval-rekordot igényel a már elfogadott munkakeret szerint. Az eredményséma nem helyettesíti az Approval-döntést, nem aktivál módosítást, és a Checker nem jogosult jóváhagyni vagy aktiválni.
+Az `APPLIED` a Task által engedélyezett munkakörben elvégzett változtatást jelenti, és önmagában nem jelent éles aktiválást. A `CORE_CHANGE` külön Approval-rekordot igényel a már elfogadott munkakeret szerint. Az eredményséma nem helyettesíti az Approval-döntést, nem aktivál módosítást, és a Checker nem jogosult jóváhagyni vagy aktiválni.
 
-## `DOCUMENT_REVIEW` tesztlefedettség
+## Tesztlefedettség
 
-1. Érvényes `DOCUMENT_REVIEW` kimenet `DONE`-hoz vezet.
+1. Mindkét típus érvényes kimenete `DONE`-hoz vezet a hozzá tartozó Approval-feltételek teljesülése esetén.
 2. Hiányzó vagy hibás bemenetnél az Executor nem indul el.
-3. Minden elfogadási feltételhez pontosan egy ellenőrzés tartozik; hiányzó, ismételt vagy ismeretlen azonosító elutasítandó.
-4. Ismeretlen forrásra hivatkozó megállapítás vagy ellenőrzés elutasítandó.
+3. `DOCUMENT_REVIEW` esetén minden elfogadási feltételhez pontosan egy ellenőrzés tartozik; minden forráshivatkozás ismert.
+4. `CORE_CHANGE` esetén a kimenet nem térhet el a tervezett scope-tól; minden változtatáshoz és elfogadási feltételhez Task-bizonyíték kell.
 5. `FAIL` eredmény, hiányzó bizonyítékhivatkozás és hibás séma-verzió elutasítandó.
 6. Ellenőrizzük a JSON-kompatibilitást és a `python -O` alatti tesztfutást.
 
 ## Emberi döntést igénylő pontok
 
-- A v0.1 követel-e további kategóriákat, vagy elegendő az `AGREEMENT`, `GAP`, `CONTRADICTION`, `RISK`, `OPEN_QUESTION` készlet?
+- A v0.1 követel-e további `DOCUMENT_REVIEW` kategóriákat, vagy elegendő az `AGREEMENT`, `GAP`, `CONTRADICTION`, `RISK`, `OPEN_QUESTION` készlet?
 - Kell-e a források és megállapítások mellett külön fájl-/artefaktum-hivatkozás?
 - A dokumentum tartalmi helyességének emberi felülvizsgálata mely későbbi komponenshez vagy folyamathoz tartozzon?
 - Kötelező legyen-e a `CORE_CHANGE` típushoz rollback- vagy visszaállítási terv? Ez hatással lehet biztonságra és architektúrára, ezért külön döntést igényel.
 
-**Státusz a próba során:** a felhasználó a `DOCUMENT_REVIEW`-t választotta első munkafajtának. A fenti sémát most a különálló prototípus és annak tesztjei valósítják meg; ez a munkavázlat továbbra sem kanonikus. A `CORE_CHANGE` saját eredménysémája későbbi, külön részfeladat.
+**Státusz a próba során:** a felhasználó a `DOCUMENT_REVIEW`-t választotta első munkafajtának. A `DOCUMENT_REVIEW` és `CORE_CHANGE` fenti v0.1 sémáit most a különálló prototípus és annak tesztjei valósítják meg. Mindkettő kísérleti és nem kanonikus; a konkrét `CORE_CHANGE` scope-, bizonyíték- és rollback-szabályok felülvizsgálatra várnak.
