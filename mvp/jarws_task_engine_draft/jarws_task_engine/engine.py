@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from uuid import uuid4
 
+from .schemas import DOCUMENT_REVIEW, validate_document_review_input
+
 
 GLOBAL_MAX_ROUNDS = 5
 
@@ -215,6 +217,15 @@ class Validator:
         provenance_valid, provenance_message = task.provenance.validate()
         if not provenance_valid:
             return False, provenance_message
+        if not isinstance(task.input, dict):
+            return False, "Task input must be an object."
+        work_kind = task.input.get("work_kind")
+        if work_kind is not None:
+            if task.task_type is not TaskType.NORMAL_TASK or work_kind != DOCUMENT_REVIEW:
+                return False, f"No input schema is configured for {task.task_type.value}/{work_kind}."
+            input_valid, input_message = validate_document_review_input(task.input)
+            if not input_valid:
+                return False, input_message
         try:
             task.effective_round_limit
         except ValueError as exc:
@@ -240,24 +251,27 @@ class TransientExecutionError(RuntimeError):
     """Explicitly allow-listed transient failure; retry only if operation is safe."""
 
 
-ResultValidator = Callable[[Any], tuple[bool, str]]
+ResultValidator = Callable[[Task, Any], tuple[bool, str]]
 
 
 class Checker:
     """Non-canonical post-check helper; validates task-specific result contracts."""
 
-    def __init__(self, schemas: Mapping[TaskType, ResultValidator]) -> None:
+    def __init__(self, schemas: Mapping[TaskType | tuple[TaskType, str], ResultValidator]) -> None:
         self._schemas = dict(schemas)
 
     def check(self, task: Task, result: Any) -> tuple[bool, str]:
-        validator = self._schemas.get(task.task_type)
+        work_kind = task.input.get("work_kind") if isinstance(task.input, Mapping) else None
+        validator = self._schemas.get((task.task_type, work_kind)) if work_kind is not None else None
         if validator is None:
-            return False, f"No result schema is configured for {task.task_type.value}."
+            validator = self._schemas.get(task.task_type)
+        if validator is None:
+            return False, f"No result schema is configured for {task.task_type.value}/{work_kind or 'DEFAULT'}."
         try:
             json.dumps(result, ensure_ascii=False, allow_nan=False)
         except (TypeError, ValueError) as exc:
             return False, f"Result is not JSON-compatible: {exc}"
-        return validator(result)
+        return validator(task, result)
 
 
 class Executor:

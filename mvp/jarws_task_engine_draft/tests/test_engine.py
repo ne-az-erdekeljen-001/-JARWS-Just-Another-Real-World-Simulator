@@ -29,6 +29,10 @@ from jarws_task_engine.engine import (  # noqa: E402
     save_task,
     unblock_task,
 )
+from jarws_task_engine.schemas import (  # noqa: E402
+    DOCUMENT_REVIEW,
+    validate_document_review_result,
+)
 
 
 def valid_provenance() -> Provenance:
@@ -42,14 +46,15 @@ def valid_provenance() -> Provenance:
 
 def result_schemas() -> dict:
     return {
-        TaskType.NORMAL_TASK: lambda value: (
+        TaskType.NORMAL_TASK: lambda _task, value: (
             isinstance(value, dict) and value.get("status") == "ok",
             "Expected an object with status='ok'.",
         ),
-        TaskType.CORE_CHANGE: lambda value: (
+        TaskType.CORE_CHANGE: lambda _task, value: (
             isinstance(value, dict) and bool(value.get("change_summary")),
             "Expected a non-empty change_summary.",
         ),
+        (TaskType.NORMAL_TASK, DOCUMENT_REVIEW): validate_document_review_result,
     }
 
 
@@ -65,6 +70,96 @@ class TaskEngineTests(unittest.TestCase):
             provenance=kwargs.pop("provenance", valid_provenance()),
             **kwargs,
         )
+
+    def make_document_review_task(self, **kwargs) -> Task:
+        input_data = {
+            "work_kind": DOCUMENT_REVIEW,
+            "request": "Compare the two source documents.",
+            "sources": [
+                {"source_id": "SRC-1", "reference": "source://one"},
+                {"source_id": "SRC-2", "reference": "source://two"},
+            ],
+            "acceptance_criteria": [
+                {"criterion_id": "AC-1", "description": "Cite relevant source material."},
+                {"criterion_id": "AC-2", "description": "List disagreements and open questions."},
+            ],
+        }
+        input_data.update(kwargs.pop("input", {}))
+        return self.make_task(input=input_data, **kwargs)
+
+    @staticmethod
+    def valid_document_review_result() -> dict:
+        return {
+            "schema_version": "0.1",
+            "task_type": TaskType.NORMAL_TASK.value,
+            "work_kind": DOCUMENT_REVIEW,
+            "outcome": "COMPLETED",
+            "summary": "Compared both sources and recorded one difference.",
+            "findings": [
+                {
+                    "finding_id": "F-1",
+                    "category": "GAP",
+                    "statement": "The second source does not define the status transition.",
+                    "source_refs": ["SRC-1", "SRC-2"],
+                }
+            ],
+            "acceptance_checks": [
+                {"criterion_id": "AC-1", "result": "PASS", "evidence_refs": ["SRC-1"]},
+                {"criterion_id": "AC-2", "result": "PASS", "evidence_refs": ["SRC-2"]},
+            ],
+        }
+
+    def test_document_review_schema_accepts_complete_report(self):
+        task = self.make_document_review_task()
+        result = orchestrator().run(task, lambda _access: self.valid_document_review_result())
+        self.assertEqual(result.state, TaskState.DONE)
+        self.assertTrue(result.validation["result_check"]["passed"])
+
+    def test_document_review_requires_valid_input_before_executor(self):
+        task = self.make_document_review_task(input={"sources": []})
+        called = False
+
+        def operation(_access):
+            nonlocal called
+            called = True
+            return self.valid_document_review_result()
+
+        result = orchestrator().run(task, operation)
+        self.assertEqual(result.state, TaskState.BLOCKED)
+        self.assertFalse(called)
+        self.assertEqual(result.attempts, 0)
+
+    def test_document_review_rejects_unknown_source_reference(self):
+        task = self.make_document_review_task(requested_rounds=1)
+        invalid = self.valid_document_review_result()
+        invalid["findings"][0]["source_refs"] = ["SRC-UNKNOWN"]
+        result = orchestrator().run(task, lambda _access: invalid)
+        self.assertEqual(result.state, TaskState.ERROR)
+        self.assertIn("unknown source", result.validation["result_check"]["message"])
+
+    def test_document_review_requires_exact_acceptance_criteria_coverage(self):
+        task = self.make_document_review_task(requested_rounds=1)
+        invalid = self.valid_document_review_result()
+        invalid["acceptance_checks"].pop()
+        result = orchestrator().run(task, lambda _access: invalid)
+        self.assertEqual(result.state, TaskState.ERROR)
+        self.assertIn("Missing acceptance checks", result.validation["result_check"]["message"])
+
+    def test_document_review_failed_acceptance_check_is_rejected(self):
+        task = self.make_document_review_task(requested_rounds=1)
+        invalid = self.valid_document_review_result()
+        invalid["acceptance_checks"][0]["result"] = "FAIL"
+        result = orchestrator().run(task, lambda _access: invalid)
+        self.assertEqual(result.state, TaskState.ERROR)
+        self.assertIn("criterion AC-1 failed", result.validation["result_check"]["message"])
+
+    def test_document_review_requires_findings_to_have_source_evidence(self):
+        task = self.make_document_review_task(requested_rounds=1)
+        invalid = self.valid_document_review_result()
+        invalid["findings"][0]["source_refs"] = []
+        result = orchestrator().run(task, lambda _access: invalid)
+        self.assertEqual(result.state, TaskState.ERROR)
+        self.assertIn("at least one source reference", result.validation["result_check"]["message"])
 
     def test_normal_task_finishes_only_after_checker_pass(self):
         task = self.make_task()

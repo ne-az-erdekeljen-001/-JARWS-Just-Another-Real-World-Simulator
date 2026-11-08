@@ -18,10 +18,10 @@ python3 -B -I -O -m unittest discover -s tests -v
 
 ## Current result
 
-- Normal mode: 19 tests passed.
-- Optimized mode (`-O`): 19 tests passed.
+- Normal mode: 25 tests passed.
+- Optimized mode (`-O`): 25 tests passed.
 
-The tests cover role boundaries, critical pre-approval and post-completion review, inactive staging and rejection archival, provenance blocking, per-Task result checks, the five-round maximum, transient retry allow-listing, checker repair rounds, interruption, authorized unblock, state revalidation, and JSON round-trips for Task and Approval records.
+The tests cover role boundaries, critical pre-approval and post-completion review, inactive staging and rejection archival, provenance blocking, `DOCUMENT_REVIEW` input/result validation and source-reference coverage, the five-round maximum, transient retry allow-listing, checker repair rounds, interruption, authorized unblock, state revalidation, and JSON round-trips for Task and Approval records.
 
 ## Limits
 
