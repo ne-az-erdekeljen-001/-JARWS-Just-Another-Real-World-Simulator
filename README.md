@@ -8,7 +8,9 @@ JARWS is in early development. Current work focuses on a project baseline, gover
 
 ## What works today
 
-The experimental Task Engine draft includes input and result validation for `DOCUMENT_REVIEW` and `CORE_CHANGE`. Its 28-test suite passed in normal and optimized (`-O`) Python 3.14.4 runs. This evidence applies to that test suite only; it does not establish that the whole platform is complete, correct, secure, or production-ready.
+The experimental Task Engine draft includes input and result validation for `DOCUMENT_REVIEW` and `CORE_CHANGE`. Its 28-test suite passed in normal and optimized (`-O`) Python 3.14.4 runs.
+
+**Verified:** 2026-11-09 · commit `f898044c72399fb063b95d91ab018131c5d8778e` · Python 3.14.4 · fresh clone. Both commands below passed 28 tests. This verification applies to that commit and test suite only; it does not establish that the whole platform is complete, correct, secure, or production-ready.
 
 A separate earlier run of `jarws_mvp_v03.py` reported 5/5 tests passing with JSON persistence. That result applies only to that MVP test run.
 
@@ -23,11 +25,11 @@ python3 -B -I -m unittest discover -s tests -v
 python3 -B -I -O -m unittest discover -s tests -v
 ```
 
-The normal and optimized runs each report 28 tests passing. See [the draft's testing notes](mvp/jarws_task_engine_draft/TESTING.md) for coverage and limitations.
+The normal and optimized runs each report 28 tests passing. See [the draft's testing notes](https://github.com/ne-az-erdekeljen-001/-JARWS-Just-Another-Real-World-Simulator/blob/main/mvp/jarws_task_engine_draft/TESTING.md) for coverage and limitations.
 
 ## What this does not prove
 
-The Task Engine and schemas are experimental, noncanonical prototypes. The tests are not a security audit or proof of production safety. They do not verify authentication, signing, crash-safe persistence, live-system activation, or the factual correctness of results. See [PR #5](https://github.com/ne-az-erdekeljen-001/-JARWS-Just-Another-Real-World-Simulator/pull/5) for the implementation summary and stated limits.
+The Task Engine and schemas are experimental, noncanonical prototypes. The tests are not a security audit or proof of production safety. They do not verify authentication, signing, concurrent-write protection, crash-safe persistence, or live-system activation. Python object boundaries do not enforce a security sandbox. These limits are described in [PR #3](https://github.com/ne-az-erdekeljen-001/-JARWS-Just-Another-Real-World-Simulator/pull/3); see also [PR #5](https://github.com/ne-az-erdekeljen-001/-JARWS-Just-Another-Real-World-Simulator/pull/5) for the current implementation summary.
 
 ## Guiding principles
 
